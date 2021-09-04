@@ -83,14 +83,27 @@ namespace MicroStateMachine
             m_IStateAndTransitionsDictionary = null;
         }
 
-        public void AddState(IState from, ICondition condition, IState to)
+        public void AddState(IState state)
         {
-            var id = from.ID;
+            var id = state.ID;
+
             if (m_IStateAndTransitionsDictionary.ContainsKey(id) == false)
             {
-                m_IStateAndTransitionsDictionary.Add(id, new IStateAndTransitions(from));
+                m_IStateAndTransitionsDictionary.Add(id, new IStateAndTransitions(state));
             }
+        }
 
+        public void AddState(IState from, ICondition condition, IState to)
+        {
+#if UNITY_EDITOR
+            Debug.Assert(from != null);
+            Debug.Assert(condition != null);
+            Debug.Assert(to != null);
+#endif
+            AddState(from);
+            AddState(to);
+
+            var id = from.ID;
             var iStateAndTransitions = m_IStateAndTransitionsDictionary[id];
             iStateAndTransitions.CreateTransition(to, condition);
 

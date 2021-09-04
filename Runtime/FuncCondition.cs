@@ -26,7 +26,7 @@ namespace MicroStateMachine
 
         public FuncCondition(Func<bool> func)
         {
-            SetFunc(null);
+            SetFunc(func);
         }
 
         public void SetFunc(Func<bool> func)
