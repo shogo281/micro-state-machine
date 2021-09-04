@@ -2,67 +2,86 @@
 using System.Collections.Generic;
 using UnityEngine;
 using System;
+using System.Runtime.Serialization;
 
 namespace MicroStateMachine
 {
-    public class StateObject<TTrigger, TContext> : IDisposable where TContext : class
+    public interface IState : IDisposable
     {
-        public bool IsBegan { get; private set; } = false;
-        public bool IsStart { get; private set; } = false;
+        long ID { get; }
+        void Begin();
+        void Update();
+        void End();
+    }
 
-        protected StateMachine<TTrigger, TContext> StateMachine { get; private set; } = null;
 
-        protected TContext Context { get; private set; } = null;
+    public class StateObject : IState
+    {
+
+        private static readonly ObjectIDGenerator OBJECT_ID_GENERATOR = new ObjectIDGenerator();
+        public bool IsUpdate { get; private set; } = false;
+
+        public long ID => OBJECT_ID_GENERATOR.GetId(this, out _);
 
         /// <summary>
         /// コンストラクタ
         /// </summary>
-        /// <param name="stateMachine"></param>
-        public StateObject(StateMachine<TTrigger, TContext> stateMachine, TContext context)
+        public StateObject()
         {
-            StateMachine = stateMachine;
-            Context = context;
         }
 
-        public virtual void OnBegin()
+        protected virtual void OnBegin()
         {
-            IsBegan = true;
         }
 
-        public virtual void OnStart()
-        {
-            IsStart = true;
-        }
-
-        public virtual void OnUpdate()
+        protected virtual void OnUpdate()
         {
 
         }
 
-        public virtual void OnStop()
+        protected virtual void OnEnd()
         {
-            IsStart = false;
         }
 
-        public virtual void OnEnd()
+        protected virtual void OnDispose()
         {
-            IsBegan = false;
+
         }
 
         public void Dispose()
         {
-            if (IsStart == true)
-            {
-                OnStop();
-            }
+            OnDispose();
 
-            if (IsBegan == true)
+            if (IsUpdate == true)
             {
                 OnEnd();
             }
+        }
 
-            StateMachine = null;
-            Context = null;
+        public void Begin()
+        {
+            if (IsUpdate == false)
+            {
+                OnBegin();
+            }
+            IsUpdate = true;
+        }
+
+        public void Update()
+        {
+            if (IsUpdate == true)
+            {
+                OnUpdate();
+            }
+        }
+
+        public void End()
+        {
+            if (IsUpdate == true)
+            {
+                OnEnd();
+            }
+            IsUpdate = false;
         }
     }
 }

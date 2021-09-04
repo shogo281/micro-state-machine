@@ -5,51 +5,23 @@ using UnityEngine;
 
 namespace MicroStateMachine
 {
-    public class StateMachine<TTrigger, TContext> : IDisposable where TContext : class
+    public class StateMachine : IDisposable
     {
-        /// <summary>
-        /// Stateが切り替わったときのイベント
-        /// </summary>
-        public event Action OnChangeState = null;
-        private readonly TContext context = null;
-        private StateObject<TTrigger, TContext> stateObject = null;
-        private Dictionary<TTrigger, StateObject<TTrigger, TContext>> triggerWithStateObjectDictionary = null;
-        private TTrigger requestState = default;
-        private bool isRequestState = false;
         private bool isDisposed = false;
+        private Dictionary<long, IStateAndTransitions> m_IStateAndTransitionsDictionary = null;
+        private HashSet<IState> m_StateHashSet = null;
 
-        /// <summary>
-        /// 現在のState
-        /// </summary>
-        /// <value></value>
-        public TTrigger CurrentTrigger { get; private set; } = default;
+        private IStateAndTransitions Current { get; set; }
 
         /// <summary>
         /// コンストラクタ
         /// </summary>
         public StateMachine()
         {
-            CurrentTrigger = default;
-            stateObject = null;
-            triggerWithStateObjectDictionary = new Dictionary<TTrigger, StateObject<TTrigger, TContext>>();
-            isRequestState = false;
-            OnChangeState = null;
             isDisposed = false;
-        }
-
-        /// <summary>
-        /// コンストラクタ
-        /// </summary>
-        /// <param name="context"></param>
-        public StateMachine(TContext context)
-        {
-            CurrentTrigger = default;
-            stateObject = null;
-            triggerWithStateObjectDictionary = new Dictionary<TTrigger, StateObject<TTrigger, TContext>>();
-            isRequestState = false;
-            OnChangeState = null;
-            this.context = context;
-            isDisposed = false;
+            m_IStateAndTransitionsDictionary = null;
+            Current = null;
+            m_StateHashSet = null;
         }
 
         /// <summary>
@@ -57,10 +29,9 @@ namespace MicroStateMachine
         /// </summary>
         public void Initialize()
         {
-            CurrentTrigger = default;
-            requestState = default;
-            stateObject = null;
-            isRequestState = false;
+            m_StateHashSet = new HashSet<IState>();
+            m_IStateAndTransitionsDictionary = new Dictionary<long, IStateAndTransitions>();
+            Current = null;
         }
 
         /// <summary>
@@ -75,175 +46,62 @@ namespace MicroStateMachine
                 return;
             }
 #endif
-            if (stateObject.IsBegan == false)
+
+            if (Current == null)
             {
-                stateObject.OnBegin();
+                return;
             }
 
-            if (stateObject.IsStart == false)
+            var anyTrue = Current.AnyTrue(out Transition transition);
+            var currentState = Current.Current;
+
+            if (anyTrue == false)
             {
-                stateObject.OnStart();
+                currentState.Begin();
+                currentState.Update();
             }
-
-            stateObject.OnUpdate();
-
-            if (isRequestState == true)
+            else
             {
-                CurrentTrigger = requestState;
-                stateObject.OnStop();
-                stateObject = GetStateObject(CurrentTrigger);
-                isRequestState = false;
-
-                if (OnChangeState != null)
-                {
-                    OnChangeState.Invoke();
-                }
+                currentState.End();
+                Current = m_IStateAndTransitionsDictionary[transition.To.ID];
             }
         }
 
         public void Dispose()
         {
-            foreach (var pair in triggerWithStateObjectDictionary)
-            {
-                if (pair.Value == null)
-                {
-                    continue;
-                }
-
-                var instance = pair.Value;
-
-                if (instance == null)
-                {
-                    continue;
-                }
-
-                instance.Dispose();
-            }
-            stateObject = null;
-            OnChangeState = null;
-            CurrentTrigger = default;
-            isRequestState = false;
-            triggerWithStateObjectDictionary = null;
             isDisposed = true;
+
+            foreach (var iStaetAndTransitions in m_IStateAndTransitionsDictionary.Values)
+            {
+                iStaetAndTransitions.Dispose();
+            }
+
+            foreach (var state in m_StateHashSet)
+            {
+                state.Dispose();
+            }
+            m_IStateAndTransitionsDictionary = null;
         }
 
-        /// <summary>
-        /// トリガーとインスタンスを紐付ける。
-        /// 呼び出し時にインスタンスを生成する
-        /// </summary>
-        /// <param name="trigger"></param>
-        /// <param name="type"></param>
-        public void AddTriggerAndCreateStateObjectInstance(TTrigger trigger, Type type)
+        public void AddState(IState from, ICondition condition, IState to)
         {
-            AddTriggerAndInstance(trigger, CreateInstance(type));
-        }
-
-        /// <summary>
-        /// トリガーとインスタンスを紐付ける。
-        /// </summary>
-        /// <param name="trigger"></param>
-        /// <param name="stateObject"></param>
-        public void AddTriggerAndInstance(TTrigger trigger, StateObject<TTrigger, TContext> stateObject)
-        {
-            if (triggerWithStateObjectDictionary.ContainsKey(trigger) == true)
+            var id = from.ID;
+            if (m_IStateAndTransitionsDictionary.ContainsKey(id) == false)
             {
-#if UNITY_EDITOR
-                Debug.LogError("すでに追加しているトリガーです。");
-#endif
-                return;
+                m_IStateAndTransitionsDictionary.Add(id, new IStateAndTransitions(from));
             }
 
-            triggerWithStateObjectDictionary.Add(trigger, stateObject);
-        }
+            var iStateAndTransitions = m_IStateAndTransitionsDictionary[id];
+            iStateAndTransitions.CreateTransition(to, condition);
 
-        /// <summary>
-        /// トリガーとインスタンスを削除する
-        /// </summary>
-        /// <param name="trigger"></param>
-        /// <returns></returns>
-        public bool RemoveTriggerAndInstance(TTrigger trigger)
-        {
-            var isContains = triggerWithStateObjectDictionary.ContainsKey(trigger) == false;
-
-            if (isContains == false)
+            if (Current == null)
             {
-#if UNITY_EDITOR
-                Debug.LogError("追加されていないトリガーを削除しようとしました。");
-#endif
-                return isContains;
+                Current = iStateAndTransitions;
             }
 
-            var instance = triggerWithStateObjectDictionary[trigger];
+            m_StateHashSet.Add(from);
+            m_StateHashSet.Add(to);
 
-            if (instance != null)
-            {
-                if (instance.IsStart == true)
-                {
-                    instance.OnStop();
-                }
-
-                if (instance.IsBegan == true)
-                {
-                    instance.OnEnd();
-                }
-            }
-
-            return triggerWithStateObjectDictionary.Remove(trigger);
-        }
-
-        /// <summary>
-        /// Stateの変更をリクエスト
-        /// </summary>
-        /// <param name="value"></param>
-        public void RequestSetState(TTrigger value)
-        {
-            if (isRequestState == true)
-            {
-#if UNITY_ENGINE
-            Debug.Warning("すでにStateの切り替えをリクエストしています。");
-#endif
-                return;
-            }
-
-            requestState = value;
-        }
-
-        /// <summary>
-        /// StateObjectを生成する
-        /// </summary>
-        /// <param name="type"></param>
-        /// <returns></returns>
-        private StateObject<TTrigger, TContext> CreateInstance(Type type)
-        {
-            var instance = Activator.CreateInstance(type, this, context) as StateObject<TTrigger, TContext>;
-
-#if UNITY_EDITOR
-            if (instance == null)
-            {
-                Debug.LogError(type.ToString() + "は無効。");
-            }
-#endif
-            return instance;
-        }
-
-        private StateObject<TTrigger, TContext> GetStateObject(TTrigger trigger)
-        {
-#if UNITY_EDITOR
-            if (triggerWithStateObjectDictionary.ContainsKey(trigger) == false)
-            {
-                Debug.LogError("追加していないトリガー。");
-            }
-#endif
-
-            var instance = triggerWithStateObjectDictionary[trigger];
-
-#if UNITY_EDITOR
-            if (instance == null)
-            {
-                Debug.LogError(trigger.ToString() + "に紐付いているインスタンスはnullです。");
-            }
-#endif
-            return instance;
         }
     }
 }
