@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System;
 using UnityEngine;
+using System.Linq;
 
 namespace MicroStateMachine
 {
@@ -62,8 +63,7 @@ namespace MicroStateMachine
             }
             else
             {
-                currentState.End();
-                Current = m_IStateAndTransitionsDictionary[transition.To.ID];
+                SetCurrentState(transition.To.ID);
             }
         }
 
@@ -114,7 +114,28 @@ namespace MicroStateMachine
 
             m_StateHashSet.Add(from);
             m_StateHashSet.Add(to);
+        }
 
+        /// <summary>
+        /// TStateでキャストできる最初の型のオブジェクトを取得する。
+        /// なければnullを返す。
+        /// </summary>
+        /// <typeparam name="TState"></typeparam>
+        /// <returns></returns>
+        public TState GetState<TState>() where TState : class, IState
+        {
+            return m_StateHashSet.FirstOrDefault(state => state is TState) as TState;
+        }
+
+        public void SetCurrentState(IState state)
+        {
+            SetCurrentState(state.ID);
+        }
+
+        public void SetCurrentState(long id)
+        {
+            Current.Current.End();
+            Current = m_IStateAndTransitionsDictionary[id];
         }
     }
 }
