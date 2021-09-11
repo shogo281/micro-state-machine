@@ -12,7 +12,9 @@ namespace MicroStateMachine
         private Dictionary<long, IStateAndTransitions> m_IStateAndTransitionsDictionary = null;
         private HashSet<IState> m_StateHashSet = null;
 
-        private IStateAndTransitions Current { get; set; }
+        public IState Current => CurrentStateAndTransitions.Current;
+
+        private IStateAndTransitions CurrentStateAndTransitions { get; set; }
 
         /// <summary>
         /// コンストラクタ
@@ -21,7 +23,7 @@ namespace MicroStateMachine
         {
             isDisposed = false;
             m_IStateAndTransitionsDictionary = null;
-            Current = null;
+            CurrentStateAndTransitions = null;
             m_StateHashSet = null;
         }
 
@@ -32,7 +34,7 @@ namespace MicroStateMachine
         {
             m_StateHashSet = new HashSet<IState>();
             m_IStateAndTransitionsDictionary = new Dictionary<long, IStateAndTransitions>();
-            Current = null;
+            CurrentStateAndTransitions = null;
         }
 
         /// <summary>
@@ -48,17 +50,18 @@ namespace MicroStateMachine
             }
 #endif
 
-            if (Current == null)
+            if (CurrentStateAndTransitions == null)
             {
                 return;
             }
 
-            var anyTrue = Current.AnyTrue(out Transition transition);
-            var currentState = Current.Current;
+            var currentState = CurrentStateAndTransitions.Current;
+            currentState.Begin();
+
+            var anyTrue = CurrentStateAndTransitions.AnyTrue(out Transition transition);
 
             if (anyTrue == false)
             {
-                currentState.Begin();
                 currentState.Update();
             }
             else
@@ -107,9 +110,9 @@ namespace MicroStateMachine
             var iStateAndTransitions = m_IStateAndTransitionsDictionary[id];
             iStateAndTransitions.CreateTransition(to, condition);
 
-            if (Current == null)
+            if (CurrentStateAndTransitions == null)
             {
-                Current = iStateAndTransitions;
+                CurrentStateAndTransitions = iStateAndTransitions;
             }
 
             m_StateHashSet.Add(from);
@@ -134,8 +137,8 @@ namespace MicroStateMachine
 
         public void SetCurrentState(long id)
         {
-            Current.Current.End();
-            Current = m_IStateAndTransitionsDictionary[id];
+            CurrentStateAndTransitions.Current.End();
+            CurrentStateAndTransitions = m_IStateAndTransitionsDictionary[id];
         }
     }
 }
